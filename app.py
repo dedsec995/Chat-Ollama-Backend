@@ -3,6 +3,7 @@ from langchain_ollama import ChatOllama
 from langchain_core.messages import AIMessage
 from cassandra.cluster import Cluster
 import uuid
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -15,28 +16,6 @@ llm = ChatOllama(
 # Cassandra setup
 cluster = Cluster(["127.0.0.1"])
 session = cluster.connect()
-
-# Create keyspace and table if not already present
-session.execute(
-    """
-    CREATE KEYSPACE IF NOT EXISTS chat_app WITH replication = {
-        'class': 'SimpleStrategy',
-        'replication_factor': '1'
-    };
-"""
-)
-
-session.execute(
-    """
-    CREATE TABLE IF NOT EXISTS chat_app.conversations (
-        conversation_id uuid,
-        message_id uuid,
-        user_message text,
-        bot_response text,
-        PRIMARY KEY (conversation_id, message_id)
-    );
-"""
-)
 
 
 # Render home page with conversation list
@@ -67,13 +46,16 @@ def chat():
     bot_response = llm.invoke(user_message)
     bot_message = bot_response.content
 
-    # Store the message and bot response in Cassandra
+    # Get current timestamp
+    timestamp = datetime.utcnow()
+
+    # Store the message, bot response, and timestamp in Cassandra
     session.execute(
         """
-        INSERT INTO chat_app.conversations (conversation_id, message_id, user_message, bot_response)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO chat_app.conversations (conversation_id, message_id, user_message, bot_response, message_timestamp)
+        VALUES (%s, %s, %s, %s, %s)
     """,
-        (conversation_id, uuid.uuid4(), user_message, bot_message),
+        (conversation_id, uuid.uuid4(), user_message, bot_message, timestamp),
     )
 
     return jsonify({"response": bot_message, "conversation_id": str(conversation_id)})
@@ -85,9 +67,12 @@ def get_conversation(conversation_id):
     # Convert the string conversation_id to UUID
     conversation_uuid = uuid.UUID(conversation_id)
 
+    # Retrieve the conversation ordered by timestamp
     rows = session.execute(
         """
-        SELECT user_message, bot_response FROM chat_app.conversations WHERE conversation_id = %s
+        SELECT user_message, bot_response FROM chat_app.conversations 
+        WHERE conversation_id = %s 
+        ORDER BY message_timestamp ASC
     """,
         (conversation_uuid,),
     )
