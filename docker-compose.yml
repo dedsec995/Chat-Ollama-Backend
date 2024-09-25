@@ -1,0 +1,14 @@
+services:
+  cassandra:
+    image: cassandra:latest
+    ports:
+      - "9042:9042"
+    environment:
+      CASSANDRA_CLUSTER_NAME: "Test Cluster"
+      CASSANDRA_DC: "DC1"
+      CASSANDRA_RACK: "Rack1"
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+
+volumes:
+  cassandra_data:
