@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request, jsonify
 from langchain_ollama import ChatOllama
-from langchain_core.messages import AIMessage
 from cassandra.cluster import Cluster
 import uuid
 from datetime import datetime
@@ -16,6 +15,13 @@ llm = ChatOllama(
 # Cassandra setup
 cluster = Cluster(["127.0.0.1"])
 session = cluster.connect()
+
+
+# Function to estimate token count (simplified)
+def count_tokens(message):
+    return len(
+        message.split()
+    )  # Simplified token count; replace with an appropriate tokenizer if available.
 
 
 # Render home page with conversation list
@@ -42,8 +48,41 @@ def chat():
     else:
         conversation_id = uuid.UUID(conversation_id)  # Convert the string to UUID
 
+    # Retrieve the entire conversation history
+    conversation_history = session.execute(
+        """
+        SELECT user_message, bot_response FROM chat_app.conversations 
+        WHERE conversation_id = %s 
+        ORDER BY message_timestamp ASC
+    """,
+        (conversation_id,),
+    )
+
+    # Construct the full context for the LLM
+    full_conversation = []
+    for row in conversation_history:
+        full_conversation.append(f"User: {row.user_message}")
+        full_conversation.append(f"Bot: {row.bot_response}")
+
+    # Append the new user message
+    full_conversation.append(f"User: {user_message}")
+
+    # Check token count and truncate if necessary
+    total_tokens = sum(count_tokens(msg) for msg in full_conversation)
+
+    while total_tokens > 8000 and len(full_conversation) > 0:
+        # Remove the oldest message (the first two entries if they exist)
+        full_conversation.pop(0)  # Remove the oldest user message
+        full_conversation.pop(0)  # Remove the oldest bot response (if exists)
+
+        # Recalculate total tokens
+        total_tokens = sum(count_tokens(msg) for msg in full_conversation)
+
+    # Join the conversation into a single string
+    context = "\n".join(full_conversation)
+
     # Get response from the LLM
-    bot_response = llm.invoke(user_message)
+    bot_response = llm.invoke(context)
     bot_message = bot_response.content
 
     # Get current timestamp
