@@ -1,10 +1,17 @@
 from flask import Flask, render_template, request, jsonify
+from flask_cors import CORS
 from langchain_ollama import ChatOllama
 from cassandra.cluster import Cluster
-import uuid
+import uuid, os
+from werkzeug.utils import secure_filename
 from datetime import datetime
 
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
+
+UPLOAD_FOLDER = "uploads/"  # Define the folder for uploaded files
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # Create the folder if it doesn't exist
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 # Initialize the Ollama model
 llm = ChatOllama(
@@ -16,6 +23,30 @@ llm = ChatOllama(
 cluster = Cluster(["127.0.0.1"])
 session = cluster.connect()
 
+session.execute(
+    """
+    CREATE TABLE IF NOT EXISTS chat_app.conversations (
+    conversation_id uuid,
+    message_id uuid,
+    user_message text,
+    bot_response text,
+    message_timestamp timestamp,
+    PRIMARY KEY (conversation_id, message_timestamp, message_id)
+    ) WITH CLUSTERING ORDER BY (message_timestamp ASC);
+    """
+)
+
+session.execute(
+    """
+    CREATE TABLE IF NOT EXISTS chat_app.uploaded_files (
+    conversation_id uuid,
+    file_id uuid,
+    file_path text,
+    upload_timestamp timestamp,
+    PRIMARY KEY (conversation_id, file_id)
+    );
+    """
+)
 
 # Function to estimate token count (simplified)
 def count_tokens(message):
@@ -27,12 +58,17 @@ def count_tokens(message):
 # Render home page with conversation list
 @app.route("/")
 def home():
+    return "Hello From Dedsec995!!"
+
+
+@app.route("/api/conversations", methods=["GET"])
+def get_conversations():
     # Fetch distinct conversation IDs to display as a list
     rows = session.execute(
         "SELECT DISTINCT conversation_id FROM chat_app.conversations;"
     )
     conversations = [str(row.conversation_id) for row in rows]
-    return render_template("index.html", conversations=conversations)
+    return jsonify({"conversations": conversations})
 
 
 # API to handle chatting
@@ -121,6 +157,55 @@ def get_conversation(conversation_id):
         for row in rows
     ]
     return jsonify(conversation)
+
+
+@app.route("/upload", methods=["POST"])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    # Retrieve the conversation_id from the request
+    conversation_id = request.form.get('conversation_id')  
+
+    # Check if the conversation_id exists
+    if conversation_id:
+        conversation_id = uuid.UUID(conversation_id)
+    else:
+        conversation_id = uuid.uuid4()
+
+    # Create a new UUID folder for the conversation
+    folder_name = str(conversation_id)  # Use the conversation_id as the folder name
+    folder_path = os.path.join(app.config['UPLOAD_FOLDER'], folder_name)
+
+    os.makedirs(folder_path, exist_ok=True)  # Create the new folder
+
+    # Save the file in the newly created folder
+    file_path = os.path.join(folder_path, secure_filename(file.filename))
+    file.save(file_path)
+
+    # Insert the file upload record into the uploaded_files table
+    session.execute(
+        """
+        INSERT INTO chat_app.uploaded_files (conversation_id, file_id, file_path, upload_timestamp)
+        VALUES (%s, %s, %s, %s)
+        """,
+        (conversation_id, uuid.uuid4(), file_path, datetime.utcnow())
+    )
+
+    session.execute(
+        """
+        INSERT INTO chat_app.conversations (conversation_id, message_id, user_message, bot_response, message_timestamp)
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        (conversation_id, uuid.uuid4(), "File uploaded: " + secure_filename(file.filename), "File received.", datetime.utcnow())
+    )
+
+    return jsonify({"message": "File uploaded successfully", "conversation_id": str(conversation_id), "folder": folder_name}), 201
 
 
 if __name__ == "__main__":
