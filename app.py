@@ -140,23 +140,26 @@ def chat():
 @app.route("/conversation/<conversation_id>", methods=["GET"])
 def get_conversation(conversation_id):
     # Convert the string conversation_id to UUID
-    conversation_uuid = uuid.UUID(conversation_id)
-
-    # Retrieve the conversation ordered by timestamp
-    rows = session.execute(
-        """
-        SELECT user_message, bot_response FROM chat_app.conversations 
-        WHERE conversation_id = %s 
-        ORDER BY message_timestamp ASC
-    """,
-        (conversation_uuid,),
-    )
-
-    conversation = [
-        {"user_message": row.user_message, "bot_response": row.bot_response}
-        for row in rows
-    ]
-    return jsonify(conversation)
+    if conversation_id == "null":
+        conversation = [
+            {"user_message": "", "bot_response": ""}
+        ]
+        return jsonify(conversation)
+    else: 
+        conversation_uuid = uuid.UUID(conversation_id)
+        rows = session.execute(
+            """
+            SELECT user_message, bot_response FROM chat_app.conversations 
+            WHERE conversation_id = %s 
+            ORDER BY message_timestamp ASC
+        """,
+            (conversation_uuid,),
+        )
+        conversation = [
+            {"user_message": row.user_message, "bot_response": row.bot_response}
+            for row in rows
+        ]
+        return jsonify(conversation)
 
 
 @app.route("/upload", methods=["POST"])
