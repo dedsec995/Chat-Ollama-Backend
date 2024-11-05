@@ -5,7 +5,7 @@ A flask backend service to serve real-time chat UI, built using Flask, Cassnadra
 Before running the backend, ensure you have the following installed:
 
 - Python 3.7 or higher
-- Apache Cassandra (or access to a Cassandra cluster)
+- Docker and Docker Compose
 - Ollama (click here to install[!https://ollama.com/]
 
 ### Installation
@@ -24,7 +24,12 @@ source env/bin/activate
 pip install -r requirements.txt
 ```
 4. Set up Cassandra:
-- Install Cassandra on your system
+- We provide a `docker-compose.yml` file to set up a Cassandra instance locally.
+- Simply run the following command to start Cassandra
+```bash
+docker-compose up -d
+```
+This will pull the official Cassandra image, start the Cassandra container, and expose it on port 9042. The keyspace and table will be automatically created on the first run by the backend application.
 - Keyspace and table will be created automatically on the first run, just make sure to change `cluster = Cluster(["127.0.0.1"])` in `app.py`.
 
 ### Running the App:
@@ -32,3 +37,5 @@ Fire up the backend by following command:
 ```bash
 python app.py
 ```
+
+Feel free to take the source code and use it as you like. It is a boiler plated code to start your own chat app powered by llm.
