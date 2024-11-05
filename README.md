@@ -38,4 +38,7 @@ Fire up the backend by following command:
 python app.py
 ```
 
-Feel free to take the source code and use it as you like. It is a boiler plated code to start your own chat app powered by llm.
+Feel free to take the source code and use it as you like. It is a boiler plated code to start your own chat app powered by llm. Do check out the [frontend](https://github.com/dedsec995/Chat-Ollama-Frontend) for this project.
+
+
+Give it a star if you liked it!!
