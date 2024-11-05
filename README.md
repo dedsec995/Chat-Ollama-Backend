@@ -1,4 +1,4 @@
-# Chat-Ollama
+# Chat-Ollama-Backend
 A flask backend service to serve real-time chat UI, built using Flask, Cassnadra and Ollama. It allows users to send and receive messages, with the data store in cassandra database.
 
 ### Prerequisites
